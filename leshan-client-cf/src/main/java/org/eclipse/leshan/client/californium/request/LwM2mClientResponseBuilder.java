@@ -18,6 +18,7 @@ package org.eclipse.leshan.client.californium.request;
 import static org.eclipse.leshan.core.californium.ResponseCodeUtil.toLwM2mResponseCode;
 
 import org.eclipse.californium.core.coap.Response;
+import org.eclipse.leshan.core.request.AuthRequest;
 import org.eclipse.leshan.core.request.BootstrapRequest;
 import org.eclipse.leshan.core.request.DeregisterRequest;
 import org.eclipse.leshan.core.request.LwM2mRequest;
@@ -106,6 +107,11 @@ public class LwM2mClientResponseBuilder<T extends LwM2mResponse> implements Upli
             // handle unexpected response:
             handleUnexpectedResponseCode(request, coapResponse);
         }
+    }
+
+    @Override
+    public void visit(AuthRequest request) {
+        // TODO: implement authorization request
     }
 
     @SuppressWarnings("unchecked")

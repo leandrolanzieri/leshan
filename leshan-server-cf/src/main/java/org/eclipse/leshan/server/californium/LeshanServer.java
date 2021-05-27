@@ -47,6 +47,8 @@ import org.eclipse.leshan.core.util.Validate;
 import org.eclipse.leshan.core.Destroyable;
 import org.eclipse.leshan.core.Startable;
 import org.eclipse.leshan.core.Stoppable;
+import org.eclipse.leshan.server.auth.AuthHandler;
+import org.eclipse.leshan.server.californium.auth.AuthResource;
 import org.eclipse.leshan.server.californium.observation.ObservationServiceImpl;
 import org.eclipse.leshan.server.californium.registration.CaliforniumRegistrationStore;
 import org.eclipse.leshan.server.californium.registration.RegisterResource;
@@ -212,6 +214,9 @@ public class LeshanServer {
         // define /rd resource
         coapServer.add(createRegisterResource(registrationService, authorizer, registrationIdProvider));
 
+        // define /ac resource
+        coapServer.add(createAuthResource(registrationService, authorizer, registrationIdProvider));
+
         // create request sender
         requestSender = createRequestSender(securedEndpoint, unsecuredEndpoint, registrationService, observationService,
                 this.modelProvider, encoder, decoder, presenceService);
@@ -268,6 +273,11 @@ public class LeshanServer {
     protected CoapResource createRegisterResource(RegistrationServiceImpl registrationService, Authorizer authorizer,
             RegistrationIdProvider registrationIdProvider) {
         return new RegisterResource(new RegistrationHandler(registrationService, authorizer, registrationIdProvider));
+    }
+
+    protected CoapResource createAuthResource(RegistrationServiceImpl registrationService, Authorizer authorizer,
+            RegistrationIdProvider registrationIdProvider) {
+        return new AuthResource(new AuthHandler(registrationService, authorizer, registrationIdProvider));
     }
 
     protected LwM2mRequestSender createRequestSender(Endpoint securedEndpoint, Endpoint unsecuredEndpoint,

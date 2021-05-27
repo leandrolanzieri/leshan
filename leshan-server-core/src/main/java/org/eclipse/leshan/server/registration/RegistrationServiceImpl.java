@@ -15,6 +15,8 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.registration;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -59,6 +61,11 @@ public class RegistrationServiceImpl implements RegistrationService, ExpirationL
     @Override
     public Registration getById(String id) {
         return store.getRegistration(id);
+    }
+
+    @Override
+    public Registration getByAddress(InetSocketAddress addr) {
+        return store.getRegistrationByAdress(addr);
     }
 
     @Override

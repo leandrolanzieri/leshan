@@ -23,6 +23,7 @@ import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.elements.EndpointContext;
 import org.eclipse.leshan.core.Link;
 import org.eclipse.leshan.core.californium.EndpointContextUtil;
+import org.eclipse.leshan.core.request.AuthRequest;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.request.BootstrapRequest;
 import org.eclipse.leshan.core.request.ContentFormat;
@@ -138,6 +139,12 @@ public class CoapRequestBuilder implements UplinkRequestVisitor {
         coapRequest = Request.newDelete();
         buildRequestSettings();
         coapRequest.getOptions().setUriPath(request.getRegistrationId());
+    }
+
+    @Override
+    public void visit(AuthRequest request) {
+        // TODO: Implement the authorization request
+        return;
     }
 
     public Request getRequest() {

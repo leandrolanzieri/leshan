@@ -15,6 +15,8 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.registration;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Iterator;
 
 /**
@@ -36,6 +38,13 @@ public interface RegistrationService {
      * @return the matching registration or <code>null</code> if not found
      */
     Registration getByEndpoint(String endpoint);
+
+    /**
+     * Retrieves a registration by Address
+     * 
+     * @return the matching registration or <code>null</code> if not found
+     */
+    Registration getByAddress(InetSocketAddress addr);
 
     /**
      * Returns an iterator over all registrations. There are no guarantees concerning the order in which the elements
