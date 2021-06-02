@@ -4,6 +4,13 @@ import static org.eclipse.leshan.core.californium.ResponseCodeUtil.toCoapRespons
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+import com.upokecenter.cbor.CBORObject;
+import com.upokecenter.cbor.CBORType;
 
 import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.coap.Response;
@@ -11,6 +18,7 @@ import org.eclipse.californium.core.coap.CoAP.ResponseCode;
 import org.eclipse.californium.core.coap.CoAP.Type;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.leshan.core.californium.LwM2mCoapResource;
+import org.eclipse.leshan.core.request.AccessGrant;
 import org.eclipse.leshan.core.request.AuthRequest;
 import org.eclipse.leshan.core.request.Identity;
 import org.eclipse.leshan.core.response.AuthResponse;
@@ -57,6 +65,11 @@ public class AuthResource extends LwM2mCoapResource {
             return;
         }
 
+        if (request.getPayload() == null) {
+            System.err.println("Request with no payload");
+            exchange.respond(ResponseCode.BAD_REQUEST);
+        }
+
         Identity host = null;
 
         // Get the request parameters
@@ -81,11 +94,37 @@ public class AuthResource extends LwM2mCoapResource {
             exchange.respond(ResponseCode.BAD_REQUEST);
         }
 
+        // Decode the requested access
+        CBORObject cbor = null;
+        try {
+            cbor = CBORObject.DecodeFromBytes(request.getPayload());
+        } catch (Exception e) {
+            System.err.println("Could not parse payload");
+            exchange.respond(ResponseCode.BAD_REQUEST);
+        }
+
+        System.out.println("Payload: " + cbor);
+
+        if (cbor.getType() != CBORType.Map) {
+            System.err.println("The payload should be a map");
+            exchange.respond(ResponseCode.BAD_REQUEST);
+        }
+
+        List<AccessGrant> grants = new ArrayList<>();
+        for (Map.Entry<CBORObject, CBORObject> entry : cbor.getEntries()) {
+            grants.add(new AccessGrant(entry.getKey(), (int) entry.getValue().AsNumber().ToInt16Checked()));
+        }
+
+        AccessGrant[] grantsArray = new AccessGrant[grants.size()];
+        grantsArray = grants.toArray(grantsArray);
+
         // Get sender identity
         Identity clientIdentity = extractIdentity(request.getSourceContext());
 
         // Prepare an authorization request to the handler
-        AuthRequest authRequest = new AuthRequest(clientIdentity, host);
+        AuthRequest authRequest = new AuthRequest(clientIdentity, host, grantsArray);
+
+        System.out.println(authRequest);
 
         SendableResponse<AuthResponse> sendableResponse = authHandler.auth(authRequest);
         AuthResponse response = sendableResponse.getResponse();

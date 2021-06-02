@@ -29,8 +29,8 @@ public class AuthResponse extends AbstractLwM2mResponse {
 
     // Syntactic sugar static constructors :
 
-    public static AuthResponse success(String registrationID) {
-        return new AuthResponse(ResponseCode.CREATED, registrationID, null);
+    public static AuthResponse success() {
+        return new AuthResponse(ResponseCode.CREATED, null, null);
     }
 
     public static AuthResponse badRequest(String errorMessage) {

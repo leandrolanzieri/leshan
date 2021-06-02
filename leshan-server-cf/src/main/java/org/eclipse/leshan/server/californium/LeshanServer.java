@@ -214,12 +214,12 @@ public class LeshanServer {
         // define /rd resource
         coapServer.add(createRegisterResource(registrationService, authorizer, registrationIdProvider));
 
-        // define /ac resource
-        coapServer.add(createAuthResource(registrationService, authorizer, registrationIdProvider));
-
         // create request sender
         requestSender = createRequestSender(securedEndpoint, unsecuredEndpoint, registrationService, observationService,
                 this.modelProvider, encoder, decoder, presenceService);
+
+        // define /ac resource
+        coapServer.add(createAuthResource(registrationService, authorizer, registrationIdProvider, requestSender));
 
         // connection cleaner
         createConnectionCleaner(securityStore, securedEndpoint);
@@ -276,8 +276,8 @@ public class LeshanServer {
     }
 
     protected CoapResource createAuthResource(RegistrationServiceImpl registrationService, Authorizer authorizer,
-            RegistrationIdProvider registrationIdProvider) {
-        return new AuthResource(new AuthHandler(registrationService, authorizer, registrationIdProvider));
+            RegistrationIdProvider registrationIdProvider, LwM2mRequestSender requestSender) {
+        return new AuthResource(new AuthHandler(registrationService, authorizer, registrationIdProvider, requestSender));
     }
 
     protected LwM2mRequestSender createRequestSender(Endpoint securedEndpoint, Endpoint unsecuredEndpoint,

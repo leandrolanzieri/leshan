@@ -1,5 +1,7 @@
 package org.eclipse.leshan.core.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty.Access;
+
 import org.eclipse.leshan.core.request.exception.InvalidRequestException;
 import org.eclipse.leshan.core.response.AuthResponse;
 
@@ -8,9 +10,9 @@ import org.eclipse.leshan.core.response.AuthResponse;
  */
 public class AuthRequest implements UplinkRequest<AuthResponse> {
 
-    // TODO: Probably replace with client
     private final Identity requester;
     private final Identity host;
+    private final AccessGrant grants[];
 
     /**
      * Sets all fields.
@@ -19,13 +21,14 @@ public class AuthRequest implements UplinkRequest<AuthResponse> {
      * @param host the Identity of the host of the resources
      * @throws InvalidRequestException if the requester or host are null
      */
-    public AuthRequest(Identity requester, Identity host) throws InvalidRequestException {
+    public AuthRequest(Identity requester, Identity host, AccessGrant grants[]) throws InvalidRequestException {
         if (null == requester || null == host) {
             throw new InvalidRequestException("Requester and Host must be defined");
         }
 
         this.requester = requester;
         this.host = host;
+        this.grants = grants;
     }
 
     @Override
@@ -39,5 +42,14 @@ public class AuthRequest implements UplinkRequest<AuthResponse> {
 
     public Identity getHost() {
         return host;
+    }
+
+    /**
+     * Returns the grants requested on the host resources.
+     *
+     * @return Array of requested grants
+     */
+    public AccessGrant[] getGrants() {
+        return grants;
     }
 }
