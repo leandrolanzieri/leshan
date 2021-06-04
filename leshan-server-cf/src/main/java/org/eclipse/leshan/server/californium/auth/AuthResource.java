@@ -33,7 +33,9 @@ public class AuthResource extends LwM2mCoapResource {
 
     private static final String RESOURCE_NAME = "ac";
 
-    private static final String QUERY_PARAM_HOST = "h=";
+    private static final String QUERY_PARAM_ENDPOINT = "ep=";
+
+    private static final String QUERY_PARAM_CREDS = "c";
 
     private final AuthHandler authHandler;
 
@@ -70,26 +72,20 @@ public class AuthResource extends LwM2mCoapResource {
             exchange.respond(ResponseCode.BAD_REQUEST);
         }
 
-        Identity host = null;
+        String hostEndpoint = null;
+        Boolean credRequested = false;
 
         // Get the request parameters
         for (String param: request.getOptions().getUriQuery()) {
-            if (param.startsWith(QUERY_PARAM_HOST)) {
-                String hostAddr = param.substring(QUERY_PARAM_HOST.length());
-                System.out.println("Host: " + hostAddr);
-                try {
-                    URI uri = new URI(hostAddr);
-                    InetSocketAddress addr = new InetSocketAddress(uri.getHost(), uri.getPort());
-                    host = Identity.unsecure(addr);
-                } catch (Exception e) {
-                    System.err.println("Could not parse host");
-                    exchange.respond(ResponseCode.BAD_REQUEST);
-                    return;
-                }
+            if (param.startsWith(QUERY_PARAM_ENDPOINT)) {
+                hostEndpoint = param.substring(QUERY_PARAM_ENDPOINT.length());
+            }
+            else if (param.contentEquals(QUERY_PARAM_CREDS)) {
+                credRequested = true;
             }
         }
 
-        if (null == host) {
+        if (null == hostEndpoint) {
             System.err.println("Host is mandatory in Authorization requests");
             exchange.respond(ResponseCode.BAD_REQUEST);
         }
@@ -122,7 +118,7 @@ public class AuthResource extends LwM2mCoapResource {
         Identity clientIdentity = extractIdentity(request.getSourceContext());
 
         // Prepare an authorization request to the handler
-        AuthRequest authRequest = new AuthRequest(clientIdentity, host, grantsArray);
+        AuthRequest authRequest = new AuthRequest(clientIdentity, hostEndpoint, grantsArray, credRequested);
 
         System.out.println(authRequest);
 

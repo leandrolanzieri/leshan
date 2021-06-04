@@ -11,8 +11,9 @@ import org.eclipse.leshan.core.response.AuthResponse;
 public class AuthRequest implements UplinkRequest<AuthResponse> {
 
     private final Identity requester;
-    private final Identity host;
+    private final String hostEndpoint;
     private final AccessGrant grants[];
+    private final Boolean credentials;
 
     /**
      * Sets all fields.
@@ -21,14 +22,15 @@ public class AuthRequest implements UplinkRequest<AuthResponse> {
      * @param host the Identity of the host of the resources
      * @throws InvalidRequestException if the requester or host are null
      */
-    public AuthRequest(Identity requester, Identity host, AccessGrant grants[]) throws InvalidRequestException {
-        if (null == requester || null == host) {
+    public AuthRequest(Identity requester, String hostEndpoint, AccessGrant grants[], Boolean credentials) throws InvalidRequestException {
+        if (null == requester || null == hostEndpoint) {
             throw new InvalidRequestException("Requester and Host must be defined");
         }
 
         this.requester = requester;
-        this.host = host;
+        this.hostEndpoint = hostEndpoint;
         this.grants = grants;
+        this.credentials = credentials;
     }
 
     @Override
@@ -40,8 +42,8 @@ public class AuthRequest implements UplinkRequest<AuthResponse> {
         return requester;
     }
 
-    public Identity getHost() {
-        return host;
+    public String getHostEndpoint() {
+        return hostEndpoint;
     }
 
     /**
@@ -51,5 +53,9 @@ public class AuthRequest implements UplinkRequest<AuthResponse> {
      */
     public AccessGrant[] getGrants() {
         return grants;
+    }
+
+    public Boolean credentialsRequested() {
+        return credentials;
     }
 }
