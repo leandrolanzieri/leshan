@@ -81,6 +81,16 @@ LEGAL DISCLAIMER
 				<Units></Units>
 				<Description><![CDATA[Used as link to associate client Object Instance.]]></Description>
 			</Item>
+			<Item ID="1">
+				<Name>Lifetime</Name>
+        <Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>Integer</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units>s</Units>
+				<Description><![CDATA[Determies how log the client account lasts. 0 means forever.]]></Description>
+			</Item>
 			<Item ID="2">
 				<Name>Default Minimum Period</Name>
         <Operations>RW</Operations>
@@ -146,6 +156,16 @@ The maximum number of storing Notifications per Server is up to the implementati
 				<Units></Units>
 				<Description><![CDATA[This Resource defines the transport binding configured for the LwM2M Client.
 If the LwM2M Client supports the binding specified in this Resource, the LwM2M Client MUST use that transport for the Current Binding Mode.]]></Description>
+			</Item>
+			<Item ID="9">
+				<Name>Endpoint Name</Name>
+        <Operations>RW</Operations>
+				<MultipleInstances>Single</MultipleInstances>
+				<Mandatory>Mandatory</Mandatory>
+				<Type>String</Type>
+				<RangeEnumeration></RangeEnumeration>
+				<Units></Units>
+				<Description><![CDATA[The LwM2M Client endpoint name. Used to reference the particular client on requests to LwM2M servers.]]></Description>
 			</Item>
 		</Resources>
 		<Description2></Description2>
