@@ -77,9 +77,6 @@ public class AuthHandler {
             return new SendableResponse<>(AuthResponse.badRequest(null));
         }
 
-        System.out.println("Requester: " + requesterReg);
-        System.out.println("Host: " + hostReg);
-
         requesterReg = this.authorizer.isAuthorized(request, requesterReg, requester);
         if (requesterReg == null) {
             return new SendableResponse<>(AuthResponse.forbidden(null));
@@ -92,13 +89,30 @@ public class AuthHandler {
 
         // TODO: For now always grant the requested access rights
         // YOU SHALL PASS!
-        LwM2mObjectInstance[] instances = BuildAccessControlInstances(request, requesterReg, hostReg);
+        int clientShortId = -1;
+
+        /* if credentials are requested, create needed objects */
+        if (request.credentialsRequested()) {
+            /* TODO: generate these */
+            String key_id = "key_identity";
+            String key = "secretkey";
+            clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
+        }
+        else {
+            clientShortId = GetClientShortID(hostReg, requesterReg.getEndpoint());
+        }
+
+        if (clientShortId < 0) {
+            return new SendableResponse<>(AuthResponse.forbidden(null));
+        }
+
+        LwM2mObjectInstance[] instances = BuildAccessControlInstances(request, requesterReg, hostReg, clientShortId);
+
         if (instances == null) {
             return new SendableResponse<>(AuthResponse.forbidden(null));
         }
 
-        int objectId = 11002;
-        CreateRequest createRequest = new CreateRequest(objectId, instances);
+        CreateRequest createRequest = new CreateRequest(CLIENT_ACL_OBJECT_ID, instances);
 
         CreateResponse createResponse = null;
         try {
@@ -135,15 +149,9 @@ public class AuthHandler {
         return true;
     }
 
-    private LwM2mObjectInstance[] BuildAccessControlInstances(AuthRequest request, Registration requester, Registration host) {
+    private LwM2mObjectInstance[] BuildAccessControlInstances(AuthRequest request, Registration requester, Registration host, int clientShortId) {
         List<ACLObjectInstance> instances = new ArrayList<>();
         int newInstanceId = 0;
-
-        int clientShortId = GetClientShortID(requester, host);
-        if (clientShortId < 0) {
-            System.err.println("Could not get the requester short ID");
-            return null;
-        }
 
         for (AccessGrant grant : request.getGrants()) {
             Integer objId = grant.getPath().getObjectId();
@@ -187,27 +195,72 @@ public class AuthHandler {
         }
     }
 
+    private static class ClientObjectInstance extends LwM2mObjectInstance {
+
+        private static final int RES_ID_SCI = 0; /* short client ID */
+        private static final int RES_ID_LIFETIME = 1;
+        private static final int RES_ID_MIN = 2;
+        private static final int RES_ID_MAX = 3;
+        private static final int RES_ID_DISABLE = 4;
+        private static final int RES_ID_DISABLE_TIME = 5;
+        private static final int RES_ID_NOTIFICATIONS = 6;
+        private static final int RES_ID_BINDING = 7;
+        private static final int RES_ID_ENDPOINT = 9;
+
+        public ClientObjectInstance(int id, Integer shortId, String endpoint) {
+            super(id, LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_LIFETIME, 0),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_MIN, 120),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_MAX, 360),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_DISABLE_TIME, 120),
+                  LwM2mSingleResource.newBooleanResource(RES_ID_NOTIFICATIONS, false),
+                  LwM2mSingleResource.newStringResource(RES_ID_BINDING, "U"),
+                  LwM2mSingleResource.newStringResource(RES_ID_ENDPOINT, endpoint));
+        }
+    }
+
+    private static class ClientSecurityObjectInstance extends LwM2mObjectInstance {
+        private static final int RES_ID_URI = 0;
+        private static final int RES_ID_MODE = 2;
+        private static final int RES_ID_PUB_KEY_OR_ID = 3;
+        private static final int RES_ID_SERVER_PUB = 4;
+        private static final int RES_ID_SEC_KEY = 5;
+        private static final int RES_ID_SMS_MODE = 6;
+        private static final int RES_ID_SMS_PARAMS = 7;
+        private static final int RES_ID_SMS_SECRET = 8;
+        private static final int RES_ID_SMS_SERVER_NUM = 9;
+        private static final int RES_ID_SCI = 10;
+        private static final int RES_ID_HOLD_OFF = 11;
+
+        public ClientSecurityObjectInstance(int id, Integer shortId, String key_id, String key) {
+            super(id, LwM2mSingleResource.newIntegerResource(RES_ID_MODE, 0), /* PSK Mode for now */
+                  LwM2mSingleResource.newBinaryResource(RES_ID_PUB_KEY_OR_ID, key_id.getBytes()),
+                  LwM2mSingleResource.newBinaryResource(RES_ID_SEC_KEY, key.getBytes()),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId));
+        }
+    }
+
     /**
-     * Tries to get the short client ID of the requester, in the host.
+     * Tries to get the short client ID in a client, of a given endpoint by name
      *
-     * @return
+     * @return short ID of the client instance in @p client, negative value on error. The absolute value is the highest ID found.
      */
-    private int GetClientShortID(Registration requester, Registration host) {
+    private int GetClientShortID(Registration client, String endpoint) {
         ReadRequest request = new ReadRequest(CLIENT_OBJECT_ID);
         ReadResponse response = null;
-        int shortID = -1;
+        int highestID = 1;
 
         try {
-            response = this.requestSender.send(host, request, null, DEFAULT_TIMEOUT);
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
         } catch (Exception e) {
-            System.err.println("Could not send the read request to the host");
+            System.err.println("Could not send the read request to the client");
             System.err.println(e);
-            return -1;
+            return -highestID;
         }
 
         if (!response.isSuccess()) {
-            System.err.println("Unsuccessful read request to the host");
-            return -1;
+            System.err.println("Unsuccessful read request to the client");
+            return -highestID;
         }
 
         LwM2mObject object = (LwM2mObject) response.getContent();
@@ -217,15 +270,120 @@ public class AuthHandler {
             LwM2mResource endpointResource = inst.getResource(CLIENT_ENDPOINT_RESOURCE_ID);
 
             if (endpointResource == null || endpointResource.getType() != Type.STRING) {
+                LwM2mResource shortIDResource = inst.getResource(CLIENT_SHORTID_RESOURCE_ID);
+                int id = (int)shortIDResource.getValue();
+                if (id > highestID) {
+                    highestID = id;
+                }
+
                 continue;
             }
 
-            String endpoint = (String) endpointResource.getValue();
-            if (endpoint.equals(requester.getEndpoint())) {
-                shortID = ((Long) inst.getResource(CLIENT_SHORTID_RESOURCE_ID).getValue()).intValue();
-                break;
+            String clientEndpoint = (String) endpointResource.getValue();
+            if (clientEndpoint.equals(endpoint)) {
+                return ((Long) inst.getResource(CLIENT_SHORTID_RESOURCE_ID).getValue()).intValue();
             }
         }
-        return shortID;
+
+        return -highestID;
+    }
+
+    /**
+     * Create a new Client Object Instance on a client, using shortId and endpoint name
+     *
+     * @param client        Client where to create the new instance
+     * @param shortId       Short client ID of the peer client account
+     * @param endpoint      Endpoint name of the peer client
+     *
+     * @return  true on success, false otherwise
+     */
+    private Boolean CreateClientInstance(Registration client, int shortId, String endpoint) {
+        LwM2mObjectInstance instance = new ClientObjectInstance(0, shortId, endpoint);
+        CreateRequest request = new CreateRequest(CLIENT_OBJECT_ID, instance.getResources().values());
+
+        CreateResponse response = null;
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the client create request to the host");
+            System.err.println(e);
+            return false;
+        }
+
+        if (response == null || response.isFailure()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Create a new Client Security Object Instance on a client, using shortID, PSK ID and PSK Key
+     *
+     * @param client        Client where to create the new instance
+     * @param shortId       Short client ID of the peer client account
+     * @param key_id        PSK Identity for the instance
+     * @param key           PSK Key for the instance
+     *
+     * @return  true on success, false otherwise
+     */
+    private Boolean CreateClientSecurityInstance(Registration client, int shortId, String key_id, String key) {
+        LwM2mObjectInstance instance = new ClientSecurityObjectInstance(0, shortId, key_id, key);
+        CreateRequest request = new CreateRequest(CLIENT_SECURITY_OBJECT_ID, instance.getResources().values());
+
+        CreateResponse response = null;
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the client security create request to the host");
+            System.err.println(e);
+            return false;
+        }
+
+        if (response == null || response.isFailure()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Creates or updates a peer client account on a given client. The account means the existence
+     * of a Client Object instance, with the given endpoint, and a Client Security Object instance,
+     * with the given keys and the short ID of the Client Object instance.
+     *
+     * @param client        Client were to create or update the new account
+     * @param endpoint      Endpoint name of the peer client to create or update the account for
+     * @param key_id        PSK Identity for the account
+     * @param key           PSK Key for the account
+     * @return  short client ID of the account in client
+     */
+    private int SetClientAccount(Registration client, String endpoint, String key_id, String key) {
+        /* first check if client with endpoint name exists in client */
+        int shortId = GetClientShortID(client, endpoint);
+        Boolean newClient = false;
+
+        /* if the client does not exist, create it */
+        if (shortId < 0) {
+            shortId = (-shortId) + 1;
+            if (!CreateClientInstance(client, shortId, endpoint)) {
+                System.err.println("Could not create client on " + client);
+                return -1;
+            }
+            newClient = true;
+        }
+
+        if (newClient) {
+            /* need to create security instance */
+            if (!CreateClientSecurityInstance(client, shortId, key_id, key)) {
+                System.err.println("Could not create client security on " + client);
+                return -1;
+            }
+            return shortId;
+        }
+        else {
+            throw new RuntimeException("To be implemented, update existing security instance");
+        }
+
     }
 }
