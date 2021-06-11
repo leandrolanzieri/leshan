@@ -23,10 +23,13 @@ import org.eclipse.leshan.core.request.AuthRequest;
 import org.eclipse.leshan.core.request.CreateRequest;
 import org.eclipse.leshan.core.request.Identity;
 import org.eclipse.leshan.core.request.ReadRequest;
+import org.eclipse.leshan.core.request.WriteRequest;
+import org.eclipse.leshan.core.request.WriteRequest.Mode;
 import org.eclipse.leshan.core.response.AuthResponse;
 import org.eclipse.leshan.core.response.CreateResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.SendableResponse;
+import org.eclipse.leshan.core.response.WriteResponse;
 import org.eclipse.leshan.server.registration.Registration;
 import org.eclipse.leshan.server.registration.RegistrationIdProvider;
 import org.eclipse.leshan.server.registration.RegistrationServiceImpl;
@@ -97,6 +100,7 @@ public class AuthHandler {
             String key_id = "key_identity";
             String key = "secretkey";
             clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
+            SetClientAccount(requesterReg, hostReg.getEndpoint(), key_id, key);
         }
         else {
             clientShortId = GetClientShortID(hostReg, requesterReg.getEndpoint());
@@ -175,10 +179,10 @@ public class AuthHandler {
     /** Instance of the Access Control Object */
     private static class ACLObjectInstance extends LwM2mObjectInstance {
 
-        private static final int RES_ID_OBJ_ID = 0;
-        private static final int RES_ID_OBJ_INST_ID = 1;
-        private static final int RES_ID_ACL = 2;
-        private static final int RES_ID_OWNER = 3;
+        static final int RES_ID_OBJ_ID = 0;
+        static final int RES_ID_OBJ_INST_ID = 1;
+        static final int RES_ID_ACL = 2;
+        static final int RES_ID_OWNER = 3;
 
         public ACLObjectInstance(int id, Integer objectId, Integer instanceId, Integer owner, LwM2mResourceInstance ...acls) {
             super(id, LwM2mSingleResource.newIntegerResource(RES_ID_OBJ_ID, objectId),
@@ -197,15 +201,15 @@ public class AuthHandler {
 
     private static class ClientObjectInstance extends LwM2mObjectInstance {
 
-        private static final int RES_ID_SCI = 0; /* short client ID */
-        private static final int RES_ID_LIFETIME = 1;
-        private static final int RES_ID_MIN = 2;
-        private static final int RES_ID_MAX = 3;
-        private static final int RES_ID_DISABLE = 4;
-        private static final int RES_ID_DISABLE_TIME = 5;
-        private static final int RES_ID_NOTIFICATIONS = 6;
-        private static final int RES_ID_BINDING = 7;
-        private static final int RES_ID_ENDPOINT = 9;
+        static final int RES_ID_SCI = 0; /* short client ID */
+        static final int RES_ID_LIFETIME = 1;
+        static final int RES_ID_MIN = 2;
+        static final int RES_ID_MAX = 3;
+        static final int RES_ID_DISABLE = 4;
+        static final int RES_ID_DISABLE_TIME = 5;
+        static final int RES_ID_NOTIFICATIONS = 6;
+        static final int RES_ID_BINDING = 7;
+        static final int RES_ID_ENDPOINT = 9;
 
         public ClientObjectInstance(int id, Integer shortId, String endpoint) {
             super(id, LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId),
@@ -220,20 +224,25 @@ public class AuthHandler {
     }
 
     private static class ClientSecurityObjectInstance extends LwM2mObjectInstance {
-        private static final int RES_ID_URI = 0;
-        private static final int RES_ID_MODE = 2;
-        private static final int RES_ID_PUB_KEY_OR_ID = 3;
-        private static final int RES_ID_SERVER_PUB = 4;
-        private static final int RES_ID_SEC_KEY = 5;
-        private static final int RES_ID_SMS_MODE = 6;
-        private static final int RES_ID_SMS_PARAMS = 7;
-        private static final int RES_ID_SMS_SECRET = 8;
-        private static final int RES_ID_SMS_SERVER_NUM = 9;
-        private static final int RES_ID_SCI = 10;
-        private static final int RES_ID_HOLD_OFF = 11;
+        static final int RES_ID_URI = 0;
+        static final int RES_ID_MODE = 2;
+        static final int RES_ID_PUB_KEY_OR_ID = 3;
+        static final int RES_ID_SERVER_PUB = 4;
+        static final int RES_ID_SEC_KEY = 5;
+        static final int RES_ID_SMS_MODE = 6;
+        static final int RES_ID_SMS_PARAMS = 7;
+        static final int RES_ID_SMS_SECRET = 8;
+        static final int RES_ID_SMS_SERVER_NUM = 9;
+        static final int RES_ID_SCI = 10;
+        static final int RES_ID_HOLD_OFF = 11;
+
+        static final int MODE_PSK = 0;
+        static final int MODE_RPK = 1;
+        static final int MODE_CERTIFICATE = 2;
+        static final int MODE_NOSEC = 3;
 
         public ClientSecurityObjectInstance(int id, Integer shortId, String key_id, String key) {
-            super(id, LwM2mSingleResource.newIntegerResource(RES_ID_MODE, 0), /* PSK Mode for now */
+            super(id, LwM2mSingleResource.newIntegerResource(RES_ID_MODE, MODE_PSK), /* PSK Mode for now */
                   LwM2mSingleResource.newBinaryResource(RES_ID_PUB_KEY_OR_ID, key_id.getBytes()),
                   LwM2mSingleResource.newBinaryResource(RES_ID_SEC_KEY, key.getBytes()),
                   LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId));
@@ -347,6 +356,71 @@ public class AuthHandler {
         return true;
     }
 
+    private Boolean UpdateClientSecurityInstance(Registration client, int shortId, String key_id, String key) {
+        ReadRequest request = new ReadRequest(CLIENT_SECURITY_OBJECT_ID);
+        ReadResponse response = null;
+
+        /* get all client security instances */
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the read request to the client");
+            System.err.println(e);
+            return false;
+        }
+
+        if (!response.isSuccess()) {
+            System.err.println("Unsuccessful read request to the client");
+            return false;
+        }
+
+        LwM2mObject object = (LwM2mObject) response.getContent();
+        LwM2mObjectInstance foundInstance = null;
+
+        /* try to find the instance for the given short client ID */
+        for (Map.Entry<Integer, LwM2mObjectInstance> instance : object.getInstances().entrySet()) {
+            LwM2mObjectInstance inst = instance.getValue();
+            LwM2mResource shortIdResource = inst.getResource(CLIENT_SECURITY_SHORT_ID_RESOURCE_ID);
+            int id = ((Long) shortIdResource.getValue()).intValue();
+
+            if (id == shortId) {
+                foundInstance = inst;
+                break;
+            }
+        }
+
+        if (foundInstance == null) {
+            return false;
+        }
+
+        /* if found, update it with the provided keys */
+        LwM2mResource[] resources = new LwM2mResource[3];
+        resources[0] = LwM2mSingleResource.newIntegerResource(ClientSecurityObjectInstance.RES_ID_MODE,
+                                                              ClientSecurityObjectInstance.MODE_PSK);
+        resources[1] = LwM2mSingleResource.newBinaryResource(ClientSecurityObjectInstance.RES_ID_PUB_KEY_OR_ID,
+                                                             key_id.getBytes());
+        resources[2] = LwM2mSingleResource.newBinaryResource(ClientSecurityObjectInstance.RES_ID_SEC_KEY,
+                                                             key.getBytes());
+
+        WriteRequest writeRequest = new WriteRequest(Mode.UPDATE, CLIENT_SECURITY_OBJECT_ID, foundInstance.getId(),
+                                                     resources);
+        WriteResponse writeResponse = null;
+
+        try {
+            writeResponse = this.requestSender.send(client, writeRequest, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the write request to the client");
+            System.err.println(e);
+            return false;
+        }
+
+        if (!writeResponse.isSuccess()) {
+            System.err.println("Unsuccessful write request to the client");
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Creates or updates a peer client account on a given client. The account means the existence
      * of a Client Object instance, with the given endpoint, and a Client Security Object instance,
@@ -382,7 +456,11 @@ public class AuthHandler {
             return shortId;
         }
         else {
-            throw new RuntimeException("To be implemented, update existing security instance");
+            if (!UpdateClientSecurityInstance(client, shortId, key_id, key)) {
+                System.err.println("Could not update client security on " + client);
+                return -1;
+            }
+            return shortId;
         }
 
     }
