@@ -42,7 +42,8 @@ public class AuthHandler {
 
     // We choose a default timeout a bit higher to the MAX_TRANSMIT_WAIT(62-93s) which is the time from starting to
     // send a Confirmable message to the time when an acknowledgement is no longer expected.
-    private static final long DEFAULT_TIMEOUT = 2 * 60 * 1000l; // 2min in ms
+    //private static final long DEFAULT_TIMEOUT = 2 * 60 * 1000l; // 2min in ms
+    private static final long DEFAULT_TIMEOUT = 2000l; // ms
 
     private static final int CLIENT_SECURITY_OBJECT_ID = 11000;
     private static final int CLIENT_OBJECT_ID = 11001;
@@ -80,8 +81,15 @@ public class AuthHandler {
             return new SendableResponse<>(AuthResponse.badRequest(null));
         }
 
+        System.out.println("Serving authorization request");
+        System.out.println("From:");
+        System.out.println(requesterReg.getEndpoint());
+        System.out.println("to access:");
+        System.out.println(hostReg.getEndpoint());
+
         requesterReg = this.authorizer.isAuthorized(request, requesterReg, requester);
         if (requesterReg == null) {
+            System.err.println("The requester is not authorized");
             return new SendableResponse<>(AuthResponse.forbidden(null));
         }
 
@@ -99,10 +107,12 @@ public class AuthHandler {
             /* TODO: generate these */
             String key_id = "key_identity";
             String key = "secretkey";
+            System.out.println("Credentials were requested");
             clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
             SetClientAccount(requesterReg, hostReg.getEndpoint(), key_id, key);
         }
         else {
+            System.out.println("Credentials were not requested");
             clientShortId = GetClientShortID(hostReg, requesterReg.getEndpoint());
         }
 
@@ -259,6 +269,9 @@ public class AuthHandler {
         ReadResponse response = null;
         int highestID = 1;
 
+        System.out.format("Trying to get client ID of %s", endpoint);
+        System.out.println("In client");
+        System.out.println(client.getIdentity().getPeerAddress());
         try {
             response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
         } catch (Exception e) {
@@ -267,7 +280,7 @@ public class AuthHandler {
             return -highestID;
         }
 
-        if (!response.isSuccess()) {
+        if (response == null || !response.isSuccess()) {
             System.err.println("Unsuccessful read request to the client");
             return -highestID;
         }
@@ -437,8 +450,12 @@ public class AuthHandler {
         int shortId = GetClientShortID(client, endpoint);
         Boolean newClient = false;
 
+        System.out.format("Setting client account for %s", endpoint);
+        System.out.format("ID: %s Key: %s", key_id, key);
+
         /* if the client does not exist, create it */
         if (shortId < 0) {
+            System.out.format("Creating client");
             shortId = (-shortId) + 1;
             if (!CreateClientInstance(client, shortId, endpoint)) {
                 System.err.println("Could not create client on " + client);
@@ -448,6 +465,7 @@ public class AuthHandler {
         }
 
         if (newClient) {
+            System.out.format("Creating security instance for the client");
             /* need to create security instance */
             if (!CreateClientSecurityInstance(client, shortId, key_id, key)) {
                 System.err.println("Could not create client security on " + client);
@@ -456,6 +474,7 @@ public class AuthHandler {
             return shortId;
         }
         else {
+            System.out.format("The client exists, updating security instance");
             if (!UpdateClientSecurityInstance(client, shortId, key_id, key)) {
                 System.err.println("Could not update client security on " + client);
                 return -1;

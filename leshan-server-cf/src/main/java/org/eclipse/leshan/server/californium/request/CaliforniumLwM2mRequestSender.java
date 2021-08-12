@@ -43,7 +43,8 @@ import org.eclipse.leshan.server.model.LwM2mModelProvider;
 import org.eclipse.leshan.server.registration.Registration;
 import org.eclipse.leshan.server.request.LowerLayerConfig;
 import org.eclipse.leshan.server.request.LwM2mRequestSender;
-
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 /**
  * An implementation of {@link LwM2mRequestSender} and {@link CoapRequestSender} based on Californium.
  */
@@ -52,6 +53,7 @@ public class CaliforniumLwM2mRequestSender implements LwM2mRequestSender, CoapRe
     private final ObservationServiceImpl observationService;
     private final LwM2mModelProvider modelProvider;
     private final RequestSender sender;
+    private static final Logger LOG = LoggerFactory.getLogger(CaliforniumLwM2mRequestSender.class);
 
     /**
      * @param secureEndpoint The endpoint used to send coaps request.
@@ -97,7 +99,7 @@ public class CaliforniumLwM2mRequestSender implements LwM2mRequestSender, CoapRe
     @Override
     public <T extends LwM2mResponse> T send(Registration destination, DownlinkRequest<T> request,
             LowerLayerConfig lowerLayerConfig, long timeoutInMs) throws InterruptedException {
-
+        LOG.debug("Sending sync req to {} at {}", destination.getIdentity().getPeerAddress().getAddress(), request.getPath());
         // Retrieve the objects definition
         final LwM2mModel model = modelProvider.getObjectModel(destination);
 

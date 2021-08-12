@@ -120,8 +120,6 @@ public class AuthResource extends LwM2mCoapResource {
         // Prepare an authorization request to the handler
         AuthRequest authRequest = new AuthRequest(clientIdentity, hostEndpoint, grantsArray, credRequested);
 
-        System.out.println(authRequest);
-
         SendableResponse<AuthResponse> sendableResponse = authHandler.auth(authRequest);
         AuthResponse response = sendableResponse.getResponse();
     
