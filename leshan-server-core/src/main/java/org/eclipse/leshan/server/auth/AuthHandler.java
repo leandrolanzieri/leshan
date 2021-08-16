@@ -15,9 +15,11 @@ import org.eclipse.leshan.core.node.LwM2mMultipleResource;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.node.LwM2mObject;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
+import org.eclipse.leshan.core.node.LwM2mPath;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.LwM2mResourceInstance;
 import org.eclipse.leshan.core.node.LwM2mSingleResource;
+import org.eclipse.leshan.core.node.ObjectLink;
 import org.eclipse.leshan.core.request.AccessGrant;
 import org.eclipse.leshan.core.request.AuthRequest;
 import org.eclipse.leshan.core.request.CreateRequest;
@@ -48,6 +50,7 @@ public class AuthHandler {
     private static final int CLIENT_SECURITY_OBJECT_ID = 11000;
     private static final int CLIENT_OBJECT_ID = 11001;
     private static final int CLIENT_ACL_OBJECT_ID = 11002;
+    private static final int OSCORE_OBJECT_ID = 21;
 
     private static final int CLIENT_SECURITY_URI_RESOURCE_ID = 0;
     private static final int CLIENT_SECURITY_SHORT_ID_RESOURCE_ID = 10;
@@ -104,12 +107,28 @@ public class AuthHandler {
 
         /* if credentials are requested, create needed objects */
         if (request.credentialsRequested()) {
-            /* TODO: generate these */
-            String key_id = "key_identity";
-            String key = "secretkey";
             System.out.println("Credentials were requested");
-            clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
-            SetClientAccount(requesterReg, hostReg.getEndpoint(), key_id, key);
+
+            if (SupportsOscore(requesterReg) && SupportsOscore(hostReg)) {
+                System.out.println("Both support OSCORE, using that");
+                /* TODO: generate these */
+                String master_secret = "0123456789abcdef";
+                String master_salt = "mastersalt";
+                String r_id = "r";
+                String s_id = "s";
+                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), master_salt,
+                                                 master_secret, r_id, s_id);
+                SetClientAccount(requesterReg, hostReg.getEndpoint(), master_salt, master_secret,
+                                 s_id, r_id);
+            }
+            else {
+                System.out.println("OSCORE not supported, using DTLS");
+                /* TODO: generate these */
+                String key_id = "key_identity";
+                String key = "secretkey";
+                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
+                SetClientAccount(requesterReg, hostReg.getEndpoint(), key_id, key);
+            }
         }
         else {
             System.out.println("Credentials were not requested");
@@ -245,6 +264,7 @@ public class AuthHandler {
         static final int RES_ID_SMS_SERVER_NUM = 9;
         static final int RES_ID_SCI = 10;
         static final int RES_ID_HOLD_OFF = 11;
+        static final int RES_ID_OSCORE_MODE = 17;
 
         static final int MODE_PSK = 0;
         static final int MODE_RPK = 1;
@@ -256,6 +276,34 @@ public class AuthHandler {
                   LwM2mSingleResource.newBinaryResource(RES_ID_PUB_KEY_OR_ID, key_id.getBytes()),
                   LwM2mSingleResource.newBinaryResource(RES_ID_SEC_KEY, key.getBytes()),
                   LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId));
+        }
+
+        public ClientSecurityObjectInstance(int id, Integer shortId, Integer oscore_instance) {
+            super(id, LwM2mSingleResource.newIntegerResource(RES_ID_MODE, MODE_NOSEC),
+            LwM2mSingleResource.newIntegerResource(RES_ID_SCI, shortId),
+            LwM2mSingleResource.newObjectLinkResource(RES_ID_OSCORE_MODE, new ObjectLink(OSCORE_OBJECT_ID, oscore_instance)));
+        }
+    }
+
+    private static class OscoreObjectInstance extends LwM2mObjectInstance {
+        static final int RES_ID_MASTER_SECRET = 0;
+        static final int RES_ID_SENDER = 1;
+        static final int RES_ID_RECIPIENT = 2;
+        static final int RES_ID_AEAD_ALG = 3;
+        static final int RES_ID_HMAC_ALG = 4;
+        static final int RES_ID_MASTER_SALT = 5;
+        static final int RES_ID_CTX = 6;
+
+        public OscoreObjectInstance(int id, String master_secret, String sender_id,
+                                    String recipient_id, String master_salt) {
+            super(id,
+                  LwM2mSingleResource.newStringResource(RES_ID_MASTER_SECRET, master_secret),
+                  LwM2mSingleResource.newStringResource(RES_ID_SENDER, sender_id),
+                  LwM2mSingleResource.newStringResource(RES_ID_RECIPIENT, recipient_id),
+                  LwM2mSingleResource.newIntegerResource(RES_ID_AEAD_ALG, 10), /* AEAD_ALG_AES_CCM_16_64_128 for now */
+                  LwM2mSingleResource.newIntegerResource(RES_ID_HMAC_ALG, 0), /* HMAC with SHA-256 for now */
+                  LwM2mSingleResource.newStringResource(RES_ID_MASTER_SALT, master_salt)
+            );
         }
     }
 
@@ -369,6 +417,75 @@ public class AuthHandler {
         return true;
     }
 
+    /**
+     * Create a new Client Security Object Instance on a client, using shortID and no security mode
+     *
+     * @param client            Client where to create the new instance
+     * @param shortId           Short client ID of the peer client account
+     * @param oscore_instance   Instance ID of the related OSCORE object
+     *
+     * @return  true on success, false otherwise
+     */
+    private Boolean CreateClientSecurityInstance(Registration client, int shortId, int oscore_instance) {
+        LwM2mObjectInstance instance = new ClientSecurityObjectInstance(0, shortId, oscore_instance);
+        CreateRequest request = new CreateRequest(CLIENT_SECURITY_OBJECT_ID, instance.getResources().values());
+
+        CreateResponse response = null;
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the client security create request to the host");
+            System.err.println(e);
+            return false;
+        }
+
+        if (response == null || response.isFailure()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Create a new OSCORE Object Instance on a client, using the provided shared secrets.
+     *
+     * @param client                Client where to create the new instance
+     * @param master_salt           Master salt
+     * @param master_secret         Master secret
+     * @param recipient_id          Recipient ID
+     * @param sender_id             Sender ID
+     *
+     * @return instance number on success, -1 otherwise
+     */
+    private int CreateOscoreInstance(Registration client, String master_salt,
+                                         String master_secret, String recipient_id,
+                                         String sender_id) {
+        LwM2mObjectInstance instance = new OscoreObjectInstance(0, master_secret, sender_id, recipient_id, master_salt);
+        CreateRequest request = new CreateRequest(OSCORE_OBJECT_ID, instance.getResources().values());
+
+        CreateResponse response = null;
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the OSCORE create request to the host");
+            System.err.println(e);
+            return -1;
+        }
+
+        if (response == null || response.isFailure()) {
+            return -1;
+        }
+
+        String location = response.getLocation();
+        LwM2mPath path = new LwM2mPath(location);
+        if (path.getObjectInstanceId() == null) {
+            return -1;
+        }
+
+        System.out.format("Created OSCORE, the new instance is %d\n", path.getObjectInstanceId());
+        return path.getObjectInstanceId();
+    }
+
     private Boolean UpdateClientSecurityInstance(Registration client, int shortId, String key_id, String key) {
         ReadRequest request = new ReadRequest(CLIENT_SECURITY_OBJECT_ID);
         ReadResponse response = null;
@@ -414,6 +531,69 @@ public class AuthHandler {
                                                              key_id.getBytes());
         resources[2] = LwM2mSingleResource.newBinaryResource(ClientSecurityObjectInstance.RES_ID_SEC_KEY,
                                                              key.getBytes());
+
+        WriteRequest writeRequest = new WriteRequest(Mode.UPDATE, CLIENT_SECURITY_OBJECT_ID, foundInstance.getId(),
+                                                     resources);
+        WriteResponse writeResponse = null;
+
+        try {
+            writeResponse = this.requestSender.send(client, writeRequest, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the write request to the client");
+            System.err.println(e);
+            return false;
+        }
+
+        if (!writeResponse.isSuccess()) {
+            System.err.println("Unsuccessful write request to the client");
+            return false;
+        }
+        return true;
+    }
+
+    private Boolean UpdateClientSecurityInstance(Registration client, int shortId, int oscore_instance) {
+        ReadRequest request = new ReadRequest(CLIENT_SECURITY_OBJECT_ID);
+        ReadResponse response = null;
+
+        /* get all client security instances */
+        try {
+            response = this.requestSender.send(client, request, null, DEFAULT_TIMEOUT);
+        } catch (Exception e) {
+            System.err.println("Could not send the read request to the client");
+            System.err.println(e);
+            return false;
+        }
+
+        if (!response.isSuccess()) {
+            System.err.println("Unsuccessful read request to the client");
+            return false;
+        }
+
+        LwM2mObject object = (LwM2mObject) response.getContent();
+        LwM2mObjectInstance foundInstance = null;
+
+        /* try to find the instance for the given short client ID */
+        for (Map.Entry<Integer, LwM2mObjectInstance> instance : object.getInstances().entrySet()) {
+            LwM2mObjectInstance inst = instance.getValue();
+            LwM2mResource shortIdResource = inst.getResource(CLIENT_SECURITY_SHORT_ID_RESOURCE_ID);
+            int id = ((Long) shortIdResource.getValue()).intValue();
+
+            if (id == shortId) {
+                foundInstance = inst;
+                break;
+            }
+        }
+
+        if (foundInstance == null) {
+            return false;
+        }
+
+        /* if found, update it */
+        LwM2mResource[] resources = new LwM2mResource[2];
+        resources[0] = LwM2mSingleResource.newIntegerResource(ClientSecurityObjectInstance.RES_ID_MODE,
+                                                              ClientSecurityObjectInstance.MODE_NOSEC);
+        resources[1] = LwM2mSingleResource.newObjectLinkResource(ClientSecurityObjectInstance.RES_ID_OSCORE_MODE,
+                                                                 new ObjectLink(OSCORE_OBJECT_ID, oscore_instance));
 
         WriteRequest writeRequest = new WriteRequest(Mode.UPDATE, CLIENT_SECURITY_OBJECT_ID, foundInstance.getId(),
                                                      resources);
@@ -481,6 +661,61 @@ public class AuthHandler {
             }
             return shortId;
         }
+    }
 
+    private int SetClientAccount(Registration client, String endpoint, String master_salt,
+                                 String master_secret, String recipient_id, String sender_id) {
+        /* first check if the client with endpoint name exists in client */
+        int shortId = GetClientShortID(client, endpoint);
+        Boolean newClient = false;
+
+        System.out.format("Setting OSCORE client account for %s\n", endpoint);
+        System.out.format("salt: %s secret: %s\n", master_salt, master_secret);
+        System.out.format("recepient: %s sender: %s\n", recipient_id, sender_id);
+
+        /* if client does not exist, create it */
+        if (shortId < 0) {
+            System.out.println("Creating client");
+            shortId = (-shortId) + 1;
+            if (!CreateClientInstance(client, shortId, endpoint)) {
+                System.err.println("Could not create client on " + client);
+                return -1;
+            }
+            newClient = true;
+        }
+
+        int oscore_instance = CreateOscoreInstance(client, master_salt, master_secret, recipient_id, sender_id);
+        if (oscore_instance < 0) {
+            System.err.println("Could not create OSCORE instance on " + client);
+            return -1;
+        }
+
+        if (newClient) {
+            System.out.format("Creating security instance for the client");
+            /* need to create security instance */
+            if (!CreateClientSecurityInstance(client, shortId, oscore_instance)) {
+                System.err.println("Could not create client security on " + client);
+                return -1;
+            }
+            return shortId;
+        }
+        else {
+            System.out.format("The client exists, updating security instance");
+            if (!UpdateClientSecurityInstance(client, shortId, oscore_instance)) {
+                System.err.println("Could not update client security on " + client);
+                return -1;
+            }
+            return shortId;
+        }
+    }
+
+    /**
+     * Determines whether a client supports the OSCORE object.
+     *
+     * @param client    Client to test.
+     * @return true if the object is supported, false otherwise.
+     */
+    private boolean SupportsOscore(Registration client) {
+        return (client.getSupportedVersion(OSCORE_OBJECT_ID) != null);
     }
 }
