@@ -44,8 +44,8 @@ public class AuthHandler {
 
     // We choose a default timeout a bit higher to the MAX_TRANSMIT_WAIT(62-93s) which is the time from starting to
     // send a Confirmable message to the time when an acknowledgement is no longer expected.
-    //private static final long DEFAULT_TIMEOUT = 2 * 60 * 1000l; // 2min in ms
-    private static final long DEFAULT_TIMEOUT = 2000l; // ms
+    private static final long DEFAULT_TIMEOUT = 2 * 60 * 1000l; // 2min in ms
+    //private static final long DEFAULT_TIMEOUT = 2000l; // ms
 
     private static final int CLIENT_SECURITY_OBJECT_ID = 11000;
     private static final int CLIENT_OBJECT_ID = 11001;
@@ -564,7 +564,7 @@ public class AuthHandler {
             return false;
         }
 
-        if (!response.isSuccess()) {
+        if (response == null || !response.isSuccess()) {
             System.err.println("Unsuccessful read request to the client");
             return false;
         }
@@ -630,12 +630,12 @@ public class AuthHandler {
         int shortId = GetClientShortID(client, endpoint);
         Boolean newClient = false;
 
-        System.out.format("Setting client account for %s", endpoint);
-        System.out.format("ID: %s Key: %s", key_id, key);
+        System.out.format("Setting client account for %s\n", endpoint);
+        System.out.format("ID: %s Key: %s\n", key_id, key);
 
         /* if the client does not exist, create it */
         if (shortId < 0) {
-            System.out.format("Creating client");
+            System.out.println("Creating client");
             shortId = (-shortId) + 1;
             if (!CreateClientInstance(client, shortId, endpoint)) {
                 System.err.println("Could not create client on " + client);
@@ -645,7 +645,7 @@ public class AuthHandler {
         }
 
         if (newClient) {
-            System.out.format("Creating security instance for the client");
+            System.out.println("Creating security instance for the client");
             /* need to create security instance */
             if (!CreateClientSecurityInstance(client, shortId, key_id, key)) {
                 System.err.println("Could not create client security on " + client);
@@ -654,7 +654,7 @@ public class AuthHandler {
             return shortId;
         }
         else {
-            System.out.format("The client exists, updating security instance");
+            System.out.println("The client exists, updating security instance");
             if (!UpdateClientSecurityInstance(client, shortId, key_id, key)) {
                 System.err.println("Could not update client security on " + client);
                 return -1;
@@ -691,7 +691,7 @@ public class AuthHandler {
         }
 
         if (newClient) {
-            System.out.format("Creating security instance for the client");
+            System.out.println("Creating security instance for the client");
             /* need to create security instance */
             if (!CreateClientSecurityInstance(client, shortId, oscore_instance)) {
                 System.err.println("Could not create client security on " + client);
@@ -700,7 +700,7 @@ public class AuthHandler {
             return shortId;
         }
         else {
-            System.out.format("The client exists, updating security instance");
+            System.out.println("The client exists, updating security instance");
             if (!UpdateClientSecurityInstance(client, shortId, oscore_instance)) {
                 System.err.println("Could not update client security on " + client);
                 return -1;
