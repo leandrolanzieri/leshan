@@ -58,6 +58,8 @@ public class AuthHandler {
     private static final int CLIENT_SHORTID_RESOURCE_ID = 0;
     private static final int CLIENT_ENDPOINT_RESOURCE_ID = 9;
 
+    private static final int CLIENT_SHORT_ID = 1; // for now hardcoded, better would be to check next available
+
     private static final Logger LOG = LoggerFactory.getLogger(AuthHandler.class);
 
     private RegistrationServiceImpl registrationService;
@@ -116,9 +118,9 @@ public class AuthHandler {
                 String master_salt = "mastersalt";
                 String r_id = "r";
                 String s_id = "s";
-                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), master_salt,
+                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), -CLIENT_SHORT_ID, master_salt,
                                                  master_secret, r_id, s_id);
-                SetClientAccount(requesterReg, hostReg.getEndpoint(), master_salt, master_secret,
+                SetClientAccount(requesterReg, hostReg.getEndpoint(), CLIENT_SHORT_ID, master_salt, master_secret,
                                  s_id, r_id);
             }
             else {
@@ -126,8 +128,8 @@ public class AuthHandler {
                 /* TODO: generate these */
                 String key_id = "key_identity";
                 String key = "secretkey";
-                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), key_id, key);
-                SetClientAccount(requesterReg, hostReg.getEndpoint(), key_id, key);
+                clientShortId = SetClientAccount(hostReg, requesterReg.getEndpoint(), -CLIENT_SHORT_ID, key_id, key);
+                SetClientAccount(requesterReg, hostReg.getEndpoint(), CLIENT_SHORT_ID, key_id, key);
             }
         }
         else {
@@ -625,9 +627,10 @@ public class AuthHandler {
      * @param key           PSK Key for the account
      * @return  short client ID of the account in client
      */
-    private int SetClientAccount(Registration client, String endpoint, String key_id, String key) {
+    private int SetClientAccount(Registration client, String endpoint, int clientShortId, String key_id, String key) {
         /* first check if client with endpoint name exists in client */
-        int shortId = GetClientShortID(client, endpoint);
+        // int shortId = GetClientShortID(client, endpoint);
+        int shortId = clientShortId; // for now we assume the server knows this to avoid extra traffic
         Boolean newClient = false;
 
         System.out.format("Setting client account for %s\n", endpoint);
@@ -663,10 +666,11 @@ public class AuthHandler {
         }
     }
 
-    private int SetClientAccount(Registration client, String endpoint, String master_salt,
+    private int SetClientAccount(Registration client, String endpoint, int clientShortId, String master_salt,
                                  String master_secret, String recipient_id, String sender_id) {
-        /* first check if the client with endpoint name exists in client */
-        int shortId = GetClientShortID(client, endpoint);
+        /* first check if client with endpoint name exists in client */
+        // int shortId = GetClientShortID(client, endpoint);
+        int shortId = clientShortId; // for now we assume the server knows this to avoid extra traffic
         Boolean newClient = false;
 
         System.out.format("Setting OSCORE client account for %s\n", endpoint);
